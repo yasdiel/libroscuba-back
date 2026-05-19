@@ -1,0 +1,186 @@
+from datetime import datetime, timezone
+from typing import Optional
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+
+from app.data.cuba_locations import is_valid_location
+from app.database import get_db
+from app.models.book import BookCreate, BookInDB, BookPublic, BookUpdate
+from app.models.user import UserInDB
+from app.services.cloudinary_service import delete_image, extract_public_id
+from app.utils.auth import get_current_user
+
+router = APIRouter(prefix="/api/books", tags=["books"])
+
+
+def book_from_doc(doc: dict, vendedor: Optional[dict] = None) -> BookPublic:
+    return BookPublic(
+        id=str(doc["_id"]),
+        owner_id=doc["owner_id"],
+        titulo=doc["titulo"],
+        autor=doc["autor"],
+        precio=doc["precio"],
+        foto_url=doc["foto_url"],
+        descripcion=doc.get("descripcion"),
+        estado=doc["estado"],
+        provincia=doc["provincia"],
+        municipio=doc["municipio"],
+        fecha_creacion=doc.get("fecha_creacion", datetime.now(timezone.utc)),
+        vendedor_nombre=vendedor.get("nombre_tienda") if vendedor else None,
+        vendedor_whatsapp=vendedor.get("whatsapp_number") if vendedor else None,
+        vendedor_municipios_envio=(vendedor.get("municipios_envio") if vendedor else None) or [],
+    )
+
+
+@router.get("", response_model=list[BookPublic])
+async def list_books(
+    provincia: Optional[str] = None,
+    municipio: Optional[str] = None,
+    q: Optional[str] = Query(None, description="Búsqueda por título o autor"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=50),
+):
+    """Lista libros. El filtro por municipio incluye también las tiendas que
+    declararon hacer envíos a ese municipio (campo `municipios_envio` del dueño).
+    """
+    db = get_db()
+
+    text_match: dict = {}
+    if q:
+        text_match["$or"] = [
+            {"titulo": {"$regex": q, "$options": "i"}},
+            {"autor": {"$regex": q, "$options": "i"}},
+        ]
+
+    location_match: dict = {}
+    if provincia:
+        location_match["$or"] = [
+            {"provincia": provincia},
+            {"owner.provincia": provincia},
+        ]
+    if municipio:
+        municipio_or = [
+            {"municipio": municipio},
+            {"owner.municipio": municipio},
+            {"owner.municipios_envio": municipio},
+        ]
+        if "$or" in location_match:
+            location_match = {
+                "$and": [
+                    {"$or": location_match["$or"]},
+                    {"$or": municipio_or},
+                ]
+            }
+        else:
+            location_match["$or"] = municipio_or
+
+    pipeline: list[dict] = [
+        *([{"$match": text_match}] if text_match else []),
+        {
+            "$lookup": {
+                "from": "users",
+                "localField": "owner_id",
+                "foreignField": "_id",
+                "as": "owner_docs",
+            }
+        },
+        {"$addFields": {"owner": {"$arrayElemAt": ["$owner_docs", 0]}}},
+        *([{"$match": location_match}] if location_match else []),
+        {"$sort": {"fecha_creacion": -1}},
+        {"$skip": skip},
+        {"$limit": limit},
+    ]
+
+    books = []
+    async for row in db.books.aggregate(pipeline):
+        owner = row.get("owner") or (row["owner_docs"][0] if row.get("owner_docs") else None)
+        books.append(book_from_doc(row, owner))
+    return books
+
+
+@router.get("/{book_id}", response_model=BookPublic)
+async def get_book(book_id: str):
+    db = get_db()
+    doc = await db.books.find_one({"_id": book_id})
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Libro no encontrado")
+    owner = await db.users.find_one({"_id": doc["owner_id"]})
+    return book_from_doc(doc, owner)
+
+
+@router.post("", response_model=BookPublic, status_code=status.HTTP_201_CREATED)
+async def create_book(payload: BookCreate, current: UserInDB = Depends(get_current_user)):
+    if not is_valid_location(payload.provincia, payload.municipio):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provincia o municipio inválido",
+        )
+    db = get_db()
+    book_id = str(uuid4())
+    doc = {
+        "_id": book_id,
+        "owner_id": current.id,
+        "titulo": payload.titulo,
+        "autor": payload.autor,
+        "precio": payload.precio,
+        "foto_url": payload.foto_url,
+        "descripcion": payload.descripcion,
+        "estado": payload.estado.value if hasattr(payload.estado, "value") else payload.estado,
+        "provincia": payload.provincia,
+        "municipio": payload.municipio,
+        "fecha_creacion": datetime.now(timezone.utc),
+        "cloudinary_public_id": extract_public_id(payload.foto_url),
+    }
+    await db.books.insert_one(doc)
+    owner_doc = {
+        "nombre_tienda": current.nombre_tienda,
+        "whatsapp_number": current.whatsapp_number,
+        "municipios_envio": current.municipios_envio,
+    }
+    return book_from_doc(doc, owner_doc)
+
+
+@router.put("/{book_id}", response_model=BookPublic)
+async def update_book(
+    book_id: str, payload: BookUpdate, current: UserInDB = Depends(get_current_user)
+):
+    db = get_db()
+    doc = await db.books.find_one({"_id": book_id})
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Libro no encontrado")
+    if doc["owner_id"] != current.id and not current.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permiso")
+    updates = payload.model_dump(exclude_unset=True)
+    prov = updates.get("provincia", doc.get("provincia"))
+    mun = updates.get("municipio", doc.get("municipio"))
+    if not is_valid_location(prov, mun):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provincia o municipio inválido",
+        )
+    if "estado" in updates and updates["estado"] is not None:
+        updates["estado"] = updates["estado"].value if hasattr(updates["estado"], "value") else updates["estado"]
+    if "foto_url" in updates:
+        updates["cloudinary_public_id"] = extract_public_id(updates["foto_url"])
+        old_url = doc.get("foto_url")
+        if old_url and old_url != updates["foto_url"]:
+            await delete_image(old_url, doc.get("cloudinary_public_id"))
+    if updates:
+        await db.books.update_one({"_id": book_id}, {"$set": updates})
+    doc = await db.books.find_one({"_id": book_id})
+    owner = await db.users.find_one({"_id": doc["owner_id"]})
+    return book_from_doc(doc, owner)
+
+
+@router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_book(book_id: str, current: UserInDB = Depends(get_current_user)):
+    db = get_db()
+    doc = await db.books.find_one({"_id": book_id})
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Libro no encontrado")
+    if doc["owner_id"] != current.id and not current.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permiso")
+    await delete_image(doc.get("foto_url", ""), doc.get("cloudinary_public_id"))
+    await db.books.delete_one({"_id": book_id})
+    return None

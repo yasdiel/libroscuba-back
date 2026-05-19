@@ -1,0 +1,36 @@
+# Render Blueprint para LibrosCuba API.
+# Conecta tu repo en https://dashboard.render.com/ → "New +" → "Blueprint" y elige este archivo.
+# Mongo NO está incluido aquí: créalo gratis en MongoDB Atlas y pega su URI en MONGO_URI.
+
+services:
+  - type: web
+    name: libroscuba-api
+    runtime: python
+    region: oregon            # puedes cambiar a frankfurt, singapore, etc.
+    plan: free                # cámbialo a starter/standard cuando lo necesites
+    rootDir: backend
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: gunicorn app.main:app -k uvicorn.workers.UvicornWorker -w 2 --bind 0.0.0.0:$PORT --timeout 60 --access-logfile -
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: MONGO_URI
+        sync: false           # cárgalo manualmente en el dashboard (secreto)
+      - key: MONGO_DB
+        value: libroscuba
+      - key: JWT_SECRET
+        generateValue: true   # Render genera un secreto seguro automáticamente
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_EXPIRE_MINUTES
+        value: "10080"
+      - key: CORS_ORIGINS
+        sync: false           # ej. https://libroscuba.netlify.app,https://libroscuba.vercel.app
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false           # opcional; si no se define, el subir-imagen queda deshabilitado
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
