@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -10,16 +11,29 @@ from app.config import settings
 from app.database import get_db
 from app.models.user import UserInDB
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# bcrypt rounds = 10 (≈100ms en CPU normal; el default 12 toma ~400ms y
+# ahoga el plan free de Render). Suficiente para una demo.
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=10)
 security = HTTPBearer(auto_error=False)
 
 
 def hash_password(password: str) -> str:
+    """Versión síncrona, úsala solo en scripts (seed_data, etc.)."""
     return pwd_context.hash(password)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
+    """Versión síncrona, úsala solo en scripts."""
     return pwd_context.verify(plain, hashed)
+
+
+async def hash_password_async(password: str) -> str:
+    """bcrypt es CPU-bound; lo movemos a thread para no bloquear el event loop."""
+    return await asyncio.to_thread(pwd_context.hash, password)
+
+
+async def verify_password_async(plain: str, hashed: str) -> bool:
+    return await asyncio.to_thread(pwd_context.verify, plain, hashed)
 
 
 def create_access_token(subject: str) -> str:

@@ -9,9 +9,9 @@ from app.models.user import LoginRequest, Token, UserCreate, UserInDB, UserPubli
 from app.utils.auth import (
     create_access_token,
     get_current_user,
-    hash_password,
+    hash_password_async,
     user_from_doc,
-    verify_password,
+    verify_password_async,
 )
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -43,9 +43,10 @@ async def register(payload: UserCreate):
             detail="Ya existe una cuenta con este número. Inicia sesión en su lugar.",
         )
     user_id = str(uuid4())
+    hashed = await hash_password_async(payload.password)
     doc = {
         "_id": user_id,
-        "hashed_password": hash_password(payload.password),
+        "hashed_password": hashed,
         "whatsapp_number": phone,
         "provincia": payload.provincia,
         "municipio": payload.municipio,
@@ -68,7 +69,7 @@ async def login(payload: LoginRequest):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No existe una cuenta con este número. Regístrate primero.",
         )
-    if not verify_password(payload.password, doc["hashed_password"]):
+    if not await verify_password_async(payload.password, doc["hashed_password"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Contraseña incorrecta",
