@@ -88,4 +88,5 @@ async def me(current: UserInDB = Depends(get_current_user)):
         nombre_tienda=current.nombre_tienda,
         municipios_envio=current.municipios_envio,
         is_admin=current.is_admin,
+        foto_tienda_url=current.foto_tienda_url,
     )

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.config import settings
 from app.models.user import UserInDB
@@ -9,10 +9,14 @@ router = APIRouter(prefix="/api/upload", tags=["upload"])
 
 
 @router.get("/signature")
-async def upload_signature(current: UserInDB = Depends(get_current_user)):
+async def upload_signature(
+    folder: str = Query("libroscuba", max_length=120),
+    _: UserInDB = Depends(get_current_user),
+):
     if not settings.cloudinary_cloud_name or not settings.cloudinary_api_secret:
         raise HTTPException(
             status_code=503,
             detail="Cloudinary no configurado. Usa una URL de imagen directa en la demo.",
         )
-    return get_upload_signature()
+    safe_folder = folder.strip().replace("..", "") or "libroscuba"
+    return get_upload_signature(safe_folder)

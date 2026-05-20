@@ -69,6 +69,7 @@ async def admin_list_stores(
                 whatsapp_number=doc["whatsapp_number"],
                 municipios_envio=doc.get("municipios_envio", []) or [],
                 book_count=count,
+                foto_tienda_url=doc.get("foto_tienda_url"),
             )
         )
     return stores
@@ -93,6 +94,10 @@ async def admin_delete_store(store_id: str, _: UserInDB = Depends(require_admin)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tienda no encontrada")
     if doc.get("is_admin"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No se puede eliminar un admin")
+    await delete_image(
+        doc.get("foto_tienda_url", ""),
+        doc.get("cloudinary_public_id_tienda"),
+    )
     async for book in db.books.find({"owner_id": store_id}):
         await delete_image(book.get("foto_url", ""), book.get("cloudinary_public_id"))
     await db.books.delete_many({"owner_id": store_id})

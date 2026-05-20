@@ -7,6 +7,7 @@ from app.database import get_db
 from app.models.book import BookPublic
 from app.models.user import UserInDB, UserPublic, UserStorePublic, UserUpdate
 from app.routers.books import book_from_doc
+from app.services.cloudinary_service import delete_image, extract_public_id
 from app.utils.auth import get_current_user, user_from_doc
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -21,6 +22,7 @@ def _user_to_public(user: UserInDB) -> UserPublic:
         nombre_tienda=user.nombre_tienda,
         municipios_envio=user.municipios_envio,
         is_admin=user.is_admin,
+        foto_tienda_url=user.foto_tienda_url,
     )
 
 
@@ -57,6 +59,16 @@ async def update_profile(payload: UserUpdate, current: UserInDB = Depends(get_cu
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Este número ya está en uso",
             )
+    if "foto_tienda_url" in updates:
+        new_url = updates["foto_tienda_url"] or None
+        updates["foto_tienda_url"] = new_url
+        updates["cloudinary_public_id_tienda"] = (
+            extract_public_id(new_url) if new_url else None
+        )
+        doc = await db.users.find_one({"_id": current.id})
+        old_url = doc.get("foto_tienda_url") if doc else None
+        if old_url and old_url != new_url:
+            await delete_image(old_url, doc.get("cloudinary_public_id_tienda"))
     if updates:
         await db.users.update_one({"_id": current.id}, {"$set": updates})
         doc = await db.users.find_one({"_id": current.id})
@@ -88,6 +100,7 @@ def _store_from_doc(doc: dict, count: int) -> UserStorePublic:
         whatsapp_number=doc["whatsapp_number"],
         municipios_envio=doc.get("municipios_envio", []) or [],
         book_count=count,
+        foto_tienda_url=doc.get("foto_tienda_url"),
     )
 
 

@@ -51,6 +51,7 @@ class UserUpdate(BaseModel):
     municipio: Optional[str] = None
     nombre_tienda: Optional[str] = Field(None, min_length=2, max_length=80)
     municipios_envio: Optional[list[str]] = None
+    foto_tienda_url: Optional[str] = Field(None, max_length=2048)
 
     @field_validator("whatsapp_number", mode="before")
     @classmethod
@@ -75,6 +76,7 @@ class UserInDB(UserBase):
     hashed_password: str
     is_admin: bool = False
     created_at: datetime
+    foto_tienda_url: Optional[str] = None
 
 
 class UserPublic(BaseModel):
@@ -85,6 +87,7 @@ class UserPublic(BaseModel):
     nombre_tienda: str
     municipios_envio: list[str] = Field(default_factory=list)
     is_admin: bool = False
+    foto_tienda_url: Optional[str] = None
 
 
 class UserStorePublic(BaseModel):
@@ -95,6 +98,7 @@ class UserStorePublic(BaseModel):
     whatsapp_number: str
     municipios_envio: list[str] = Field(default_factory=list)
     book_count: int = 0
+    foto_tienda_url: Optional[str] = None
 
 
 class Token(BaseModel):
