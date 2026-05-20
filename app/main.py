@@ -42,8 +42,15 @@ app.include_router(upload.router)
 
 @app.get("/api/health")
 async def health():
+    """Health check de Render: confirma API + Mongo."""
     from app.database import get_db
 
     db = get_db()
     await db.command("ping")
     return {"status": "ok", "service": "libroscuba", "database": "connected"}
+
+
+@app.get("/api/ping")
+async def ping():
+    """Respuesta mínima para calentar el proceso sin tocar Mongo."""
+    return {"status": "ok"}

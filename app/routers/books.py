@@ -8,6 +8,11 @@ from app.data.cuba_locations import is_valid_location
 from app.database import get_db
 from app.models.book import BookCreate, BookInDB, BookPublic, BookUpdate
 from app.models.user import UserInDB
+from app.services.books_query import (
+    build_book_filter,
+    fetch_books_page,
+    owner_ids_for_location,
+)
 from app.services.cloudinary_service import delete_image, extract_public_id
 from app.utils.auth import get_current_user
 
@@ -45,58 +50,14 @@ async def list_books(
     declararon hacer envíos a ese municipio (campo `municipios_envio` del dueño).
     """
     db = get_db()
-
-    text_match: dict = {}
-    if q:
-        text_match["$or"] = [
-            {"titulo": {"$regex": q, "$options": "i"}},
-            {"autor": {"$regex": q, "$options": "i"}},
-        ]
-
-    location_match: dict = {}
-    if provincia:
-        location_match["$or"] = [
-            {"provincia": provincia},
-            {"owner.provincia": provincia},
-        ]
-    if municipio:
-        municipio_or = [
-            {"municipio": municipio},
-            {"owner.municipio": municipio},
-            {"owner.municipios_envio": municipio},
-        ]
-        if "$or" in location_match:
-            location_match = {
-                "$and": [
-                    {"$or": location_match["$or"]},
-                    {"$or": municipio_or},
-                ]
-            }
-        else:
-            location_match["$or"] = municipio_or
-
-    pipeline: list[dict] = [
-        *([{"$match": text_match}] if text_match else []),
-        {
-            "$lookup": {
-                "from": "users",
-                "localField": "owner_id",
-                "foreignField": "_id",
-                "as": "owner_docs",
-            }
-        },
-        {"$addFields": {"owner": {"$arrayElemAt": ["$owner_docs", 0]}}},
-        *([{"$match": location_match}] if location_match else []),
-        {"$sort": {"fecha_creacion": -1}},
-        {"$skip": skip},
-        {"$limit": limit},
-    ]
-
-    books = []
-    async for row in db.books.aggregate(pipeline):
-        owner = row.get("owner") or (row["owner_docs"][0] if row.get("owner_docs") else None)
-        books.append(book_from_doc(row, owner))
-    return books
+    owner_ids = await owner_ids_for_location(db, provincia, municipio)
+    book_match = build_book_filter(
+        q=q,
+        provincia=provincia,
+        municipio=municipio,
+        owner_ids=owner_ids,
+    )
+    return await fetch_books_page(db, book_match, skip, limit, book_from_doc)
 
 
 @router.get("/{book_id}", response_model=BookPublic)

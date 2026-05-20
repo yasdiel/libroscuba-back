@@ -19,8 +19,16 @@ async def connect_db() -> None:
 
 
 async def _ensure_indexes(database: AsyncIOMotorDatabase) -> None:
-    """Garantiza unicidad de whatsapp_number a nivel de Mongo."""
+    """Índices para consultas frecuentes en producción."""
     await database.users.create_index("whatsapp_number", unique=True)
+    await database.users.create_index("provincia")
+    await database.users.create_index("municipio")
+    await database.users.create_index("municipios_envio")
+
+    await database.books.create_index([("fecha_creacion", -1)])
+    await database.books.create_index("owner_id")
+    await database.books.create_index("provincia")
+    await database.books.create_index("municipio")
 
 
 async def close_db() -> None:
