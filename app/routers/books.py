@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from app.data.cuba_locations import is_valid_location
 from app.database import get_db
 from app.models.book import BookCreate, BookInDB, BookListPublic, BookPublic, BookUpdate
-from app.services.media_url import image_url_for_response
+from app.services.media_url import image_url_for_response, optional_image_url_for_response
 from app.models.user import UserInDB
 from app.services.books_query import (
     build_book_filter,
@@ -35,6 +35,9 @@ def book_from_doc(doc: dict, vendedor: Optional[dict] = None) -> BookPublic:
         fecha_creacion=doc.get("fecha_creacion", datetime.now(timezone.utc)),
         vendedor_nombre=vendedor.get("nombre_tienda") if vendedor else None,
         vendedor_whatsapp=vendedor.get("whatsapp_number") if vendedor else None,
+        vendedor_foto_tienda_url=(
+            optional_image_url_for_response(vendedor.get("foto_tienda_url")) if vendedor else None
+        ),
         vendedor_municipios_envio=(vendedor.get("municipios_envio") if vendedor else None) or [],
     )
 
@@ -53,6 +56,9 @@ def book_list_from_doc(doc: dict, vendedor: Optional[dict] = None) -> BookListPu
         fecha_creacion=doc.get("fecha_creacion", datetime.now(timezone.utc)),
         vendedor_nombre=vendedor.get("nombre_tienda") if vendedor else None,
         vendedor_whatsapp=vendedor.get("whatsapp_number") if vendedor else None,
+        vendedor_foto_tienda_url=(
+            optional_image_url_for_response(vendedor.get("foto_tienda_url")) if vendedor else None
+        ),
         vendedor_municipios_envio=(vendedor.get("municipios_envio") if vendedor else None) or [],
     )
 
@@ -117,6 +123,7 @@ async def create_book(payload: BookCreate, current: UserInDB = Depends(get_curre
         "nombre_tienda": current.nombre_tienda,
         "whatsapp_number": current.whatsapp_number,
         "municipios_envio": current.municipios_envio,
+        "foto_tienda_url": current.foto_tienda_url,
     }
     return book_from_doc(doc, owner_doc)
 

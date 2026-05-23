@@ -61,6 +61,7 @@ class BookPublic(BookBase):
     fecha_creacion: datetime
     vendedor_nombre: Optional[str] = None
     vendedor_whatsapp: Optional[str] = None
+    vendedor_foto_tienda_url: Optional[str] = None
     vendedor_municipios_envio: list[str] = Field(default_factory=list)
 
 
@@ -79,6 +80,7 @@ class BookListPublic(BaseModel):
     fecha_creacion: datetime
     vendedor_nombre: Optional[str] = None
     vendedor_whatsapp: Optional[str] = None
+    vendedor_foto_tienda_url: Optional[str] = None
     vendedor_municipios_envio: list[str] = Field(default_factory=list)
 
 

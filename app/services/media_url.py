@@ -12,7 +12,7 @@ def validate_image_url(url: str, *, required: bool = True) -> str:
         return ""
     u = url.strip()
     if u.startswith("data:"):
-        raise ValueError("La imagen debe subirse a Cloudinary, no como archivo embebido")
+        raise ValueError("La imagen debe subirse desde la galería, no como archivo embebido")
     if len(u) > MAX_URL_LEN:
         raise ValueError("URL de imagen demasiado larga")
     if not u.startswith("https://"):

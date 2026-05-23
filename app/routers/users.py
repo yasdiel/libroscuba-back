@@ -90,6 +90,7 @@ async def my_books(current: UserInDB = Depends(get_current_user)):
         "nombre_tienda": current.nombre_tienda,
         "whatsapp_number": current.whatsapp_number,
         "municipios_envio": current.municipios_envio,
+        "foto_tienda_url": current.foto_tienda_url,
     }
     async for doc in cursor:
         books.append(book_list_from_doc(doc, owner_doc))
@@ -145,6 +146,7 @@ async def get_store_books(store_id: str, q: Optional[str] = None):
         "nombre_tienda": owner["nombre_tienda"],
         "whatsapp_number": owner["whatsapp_number"],
         "municipios_envio": owner.get("municipios_envio", []) or [],
+        "foto_tienda_url": owner.get("foto_tienda_url"),
     }
     cursor = db.books.find(query, LIST_BOOK_PROJECTION).sort("fecha_creacion", -1)
     return [book_list_from_doc(doc, owner_doc) async for doc in cursor]
