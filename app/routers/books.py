@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.data.cuba_locations import is_valid_location
 from app.database import get_db
-from app.models.book import BookCreate, BookInDB, BookPublic, BookUpdate
+from app.models.book import BookCreate, BookInDB, BookListPublic, BookPublic, BookUpdate
+from app.services.media_url import image_url_for_response
 from app.models.user import UserInDB
 from app.services.books_query import (
     build_book_filter,
@@ -26,7 +27,7 @@ def book_from_doc(doc: dict, vendedor: Optional[dict] = None) -> BookPublic:
         titulo=doc["titulo"],
         autor=doc["autor"],
         precio=doc["precio"],
-        foto_url=doc["foto_url"],
+        foto_url=image_url_for_response(doc.get("foto_url")),
         descripcion=doc.get("descripcion"),
         estado=doc["estado"],
         provincia=doc["provincia"],
@@ -38,7 +39,25 @@ def book_from_doc(doc: dict, vendedor: Optional[dict] = None) -> BookPublic:
     )
 
 
-@router.get("", response_model=list[BookPublic])
+def book_list_from_doc(doc: dict, vendedor: Optional[dict] = None) -> BookListPublic:
+    return BookListPublic(
+        id=str(doc["_id"]),
+        owner_id=doc["owner_id"],
+        titulo=doc["titulo"],
+        autor=doc["autor"],
+        precio=doc["precio"],
+        foto_url=image_url_for_response(doc.get("foto_url")),
+        estado=doc["estado"],
+        provincia=doc["provincia"],
+        municipio=doc["municipio"],
+        fecha_creacion=doc.get("fecha_creacion", datetime.now(timezone.utc)),
+        vendedor_nombre=vendedor.get("nombre_tienda") if vendedor else None,
+        vendedor_whatsapp=vendedor.get("whatsapp_number") if vendedor else None,
+        vendedor_municipios_envio=(vendedor.get("municipios_envio") if vendedor else None) or [],
+    )
+
+
+@router.get("", response_model=list[BookListPublic])
 async def list_books(
     provincia: Optional[str] = None,
     municipio: Optional[str] = None,
@@ -57,7 +76,7 @@ async def list_books(
         municipio=municipio,
         owner_ids=owner_ids,
     )
-    return await fetch_books_page(db, book_match, skip, limit, book_from_doc)
+    return await fetch_books_page(db, book_match, skip, limit, book_list_from_doc)
 
 
 @router.get("/{book_id}", response_model=BookPublic)

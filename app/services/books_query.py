@@ -6,6 +6,20 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 T = TypeVar("T")
 
+# No leer descripcion desde Mongo en listados (menos I/O).
+LIST_BOOK_PROJECTION = {
+    "_id": 1,
+    "owner_id": 1,
+    "titulo": 1,
+    "autor": 1,
+    "precio": 1,
+    "foto_url": 1,
+    "estado": 1,
+    "provincia": 1,
+    "municipio": 1,
+    "fecha_creacion": 1,
+}
+
 
 def _merge_match(*parts: dict[str, Any]) -> dict[str, Any]:
     filtered = [p for p in parts if p]
@@ -101,7 +115,7 @@ async def fetch_books_page(
     """Dos consultas indexadas: libros paginados + tiendas de esa página."""
     query = book_match or {}
     docs = (
-        await db.books.find(query)
+        await db.books.find(query, LIST_BOOK_PROJECTION)
         .sort("fecha_creacion", -1)
         .skip(skip)
         .limit(limit)

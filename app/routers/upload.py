@@ -16,7 +16,7 @@ async def upload_signature(
     if not settings.cloudinary_cloud_name or not settings.cloudinary_api_secret:
         raise HTTPException(
             status_code=503,
-            detail="Cloudinary no configurado. Usa una URL de imagen directa en la demo.",
+            detail="Cloudinary no configurado en el servidor (CLOUDINARY_API_SECRET).",
         )
     safe_folder = folder.strip().replace("..", "") or "libroscuba"
     return get_upload_signature(safe_folder)
