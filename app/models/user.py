@@ -53,6 +53,21 @@ class UserUpdate(BaseModel):
     municipios_envio: Optional[list[str]] = None
     foto_tienda_url: Optional[str] = Field(None, max_length=2048)
 
+    @field_validator("foto_tienda_url", mode="before")
+    @classmethod
+    def validate_foto_tienda_url(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == "":
+            return None
+        if not isinstance(v, str):
+            raise ValueError("URL de foto inválida")
+        if v.startswith("data:"):
+            raise ValueError(
+                "La foto debe subirse a Cloudinary. Vuelve a intentarlo o revisa la configuración."
+            )
+        if not v.startswith(("http://", "https://")):
+            raise ValueError("La URL de la foto debe comenzar con http:// o https://")
+        return v
+
     @field_validator("whatsapp_number", mode="before")
     @classmethod
     def validate_phone(cls, v: Optional[str]) -> Optional[str]:
