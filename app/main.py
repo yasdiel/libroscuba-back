@@ -11,8 +11,18 @@ from app.services.cloudinary_service import configure_cloudinary
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    import logging
+
     await connect_db()
     configure_cloudinary()
+    log = logging.getLogger("uvicorn.error")
+    if settings.smtp_configured:
+        log.info("[LibrosCuba] SMTP listo (%s)", settings.smtp_host)
+    else:
+        log.warning(
+            "[LibrosCuba] SMTP incompleto — faltan: %s",
+            ", ".join(settings.smtp_missing_fields()) or "SMTP_*",
+        )
     yield
     await close_db()
 
@@ -47,7 +57,13 @@ async def health():
 
     db = get_db()
     await db.command("ping")
-    return {"status": "ok", "service": "libroscuba", "database": "connected"}
+    return {
+        "status": "ok",
+        "service": "libroscuba",
+        "database": "connected",
+        "email_configured": settings.smtp_configured,
+        "email_missing_env": settings.smtp_missing_fields(),
+    }
 
 
 @app.get("/api/ping")

@@ -2,21 +2,15 @@
 
 import asyncio
 import logging
+import os
 import smtplib
 from email.message import EmailMessage
+
+from fastapi import HTTPException, status
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
-
-
-def _smtp_configured() -> bool:
-    return bool(
-        settings.smtp_host
-        and settings.smtp_from
-        and settings.smtp_user
-        and settings.smtp_password
-    )
 
 
 def _send_sync(to_email: str, subject: str, body: str) -> None:
@@ -26,14 +20,10 @@ def _send_sync(to_email: str, subject: str, body: str) -> None:
     msg["To"] = to_email
     msg.set_content(body)
 
-    if settings.smtp_user and settings.smtp_password:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30) as server:
-            server.starttls()
-            server.login(settings.smtp_user, settings.smtp_password)
-            server.send_message(msg)
-    else:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30) as server:
-            server.send_message(msg)
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30) as server:
+        server.starttls()
+        server.login(settings.smtp_user, settings.smtp_password)
+        server.send_message(msg)
 
 
 async def send_register_otp_email(to_email: str, code: str) -> None:
@@ -48,13 +38,41 @@ async def send_register_otp_email(to_email: str, code: str) -> None:
         f"— LibrosCuba"
     )
 
-    if not _smtp_configured():
+    if not settings.smtp_configured:
+        missing = ", ".join(settings.smtp_missing_fields())
         logger.warning(
-            "[LibrosCuba] SMTP no configurado. OTP para %s: %s (válido %s min)",
+            "[LibrosCuba] SMTP no configurado (faltan: %s). OTP para %s: %s",
+            missing or "desconocido",
             to_email,
             code,
-            minutes,
         )
+        if os.getenv("RENDER"):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "El servidor de correo no está configurado. "
+                    f"Revisa en Render: {missing}. "
+                    "Los nombres deben ser SMTP_HOST, SMTP_USER, SMTP_PASSWORD "
+                    "(no SMPT)."
+                ),
+            )
         return
 
-    await asyncio.to_thread(_send_sync, to_email, subject, body)
+    try:
+        await asyncio.to_thread(_send_sync, to_email, subject, body)
+        logger.info("[LibrosCuba] OTP enviado por correo a %s", to_email)
+    except smtplib.SMTPAuthenticationError as e:
+        logger.exception("SMTP auth failed")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "No se pudo autenticar con Gmail. Usa una contraseña de aplicación "
+                "(no la contraseña normal) en SMTP_PASSWORD."
+            ),
+        ) from e
+    except Exception as e:
+        logger.exception("SMTP send failed")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No se pudo enviar el correo. Intenta de nuevo en unos minutos.",
+        ) from e
