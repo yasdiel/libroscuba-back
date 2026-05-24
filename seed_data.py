@@ -18,6 +18,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.config import settings
 from app.utils.auth import hash_password
+from app.utils.store_slug import allocate_tienda_slug
 
 ADMIN = {
     "password": "admin123",
@@ -39,6 +40,7 @@ async def reset_to_admin_only() -> None:
 
     now = datetime.now(timezone.utc)
     admin_id = str(uuid4())
+    admin_slug = await allocate_tienda_slug(db, ADMIN["nombre_tienda"])
     await db.users.insert_one(
         {
             "_id": admin_id,
@@ -47,6 +49,7 @@ async def reset_to_admin_only() -> None:
             "provincia": ADMIN["provincia"],
             "municipio": ADMIN["municipio"],
             "nombre_tienda": ADMIN["nombre_tienda"],
+            "tienda_slug": admin_slug,
             "municipios_envio": ADMIN["municipios_envio"],
             "is_admin": True,
             "created_at": now,

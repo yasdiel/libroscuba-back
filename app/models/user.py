@@ -83,6 +83,7 @@ class UserInDB(UserBase):
     is_admin: bool = False
     created_at: datetime
     foto_tienda_url: Optional[str] = None
+    tienda_slug: str = ""
 
 
 class UserPublic(BaseModel):
@@ -91,6 +92,7 @@ class UserPublic(BaseModel):
     provincia: str
     municipio: str
     nombre_tienda: str
+    tienda_slug: str
     municipios_envio: list[str] = Field(default_factory=list)
     is_admin: bool = False
     foto_tienda_url: Optional[str] = None
@@ -99,6 +101,7 @@ class UserPublic(BaseModel):
 class UserStorePublic(BaseModel):
     id: str
     nombre_tienda: str
+    tienda_slug: str
     provincia: str
     municipio: str
     whatsapp_number: str

@@ -11,6 +11,12 @@ from app.services.books_query import LIST_BOOK_PROJECTION
 from app.services.cloudinary_service import delete_image, extract_public_id
 from app.services.media_url import optional_image_url_for_response
 from app.utils.auth import get_current_user, user_from_doc
+from app.utils.store_slug import (
+    allocate_tienda_slug,
+    ensure_tienda_slug_on_user,
+    find_store_doc,
+    nombre_tienda_taken,
+)
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -22,6 +28,7 @@ def _user_to_public(user: UserInDB) -> UserPublic:
         provincia=user.provincia,
         municipio=user.municipio,
         nombre_tienda=user.nombre_tienda,
+        tienda_slug=user.tienda_slug,
         municipios_envio=user.municipios_envio,
         is_admin=user.is_admin,
         foto_tienda_url=optional_image_url_for_response(user.foto_tienda_url),
@@ -61,6 +68,16 @@ async def update_profile(payload: UserUpdate, current: UserInDB = Depends(get_cu
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Este número ya está en uso",
             )
+    if "nombre_tienda" in updates:
+        new_name = updates["nombre_tienda"].strip()
+        if await nombre_tienda_taken(db, new_name, exclude_user_id=current.id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Ya existe una tienda con ese nombre. Elige otro nombre.",
+            )
+        updates["tienda_slug"] = await allocate_tienda_slug(
+            db, new_name, exclude_user_id=current.id
+        )
     if "foto_tienda_url" in updates:
         new_url = updates["foto_tienda_url"] or None
         updates["foto_tienda_url"] = new_url
@@ -91,6 +108,7 @@ async def my_books(current: UserInDB = Depends(get_current_user)):
         "whatsapp_number": current.whatsapp_number,
         "municipios_envio": current.municipios_envio,
         "foto_tienda_url": current.foto_tienda_url,
+        "tienda_slug": current.tienda_slug,
     }
     async for doc in cursor:
         books.append(book_list_from_doc(doc, owner_doc))
@@ -101,6 +119,7 @@ def _store_from_doc(doc: dict, count: int) -> UserStorePublic:
     return UserStorePublic(
         id=str(doc["_id"]),
         nombre_tienda=doc["nombre_tienda"],
+        tienda_slug=doc["tienda_slug"],
         provincia=doc["provincia"],
         municipio=doc["municipio"],
         whatsapp_number=doc["whatsapp_number"],
@@ -115,28 +134,33 @@ async def list_stores():
     db = get_db()
     stores = []
     async for doc in db.users.find({"is_admin": {"$ne": True}}):
+        if not doc.get("tienda_slug"):
+            await ensure_tienda_slug_on_user(db, doc)
+            doc = await db.users.find_one({"_id": doc["_id"]}) or doc
         count = await db.books.count_documents({"owner_id": str(doc["_id"])})
         stores.append(_store_from_doc(doc, count))
     return stores
 
 
-@router.get("/stores/{store_id}", response_model=UserStorePublic)
-async def get_store(store_id: str):
+@router.get("/stores/{store_slug}", response_model=UserStorePublic)
+async def get_store(store_slug: str):
     db = get_db()
-    doc = await db.users.find_one({"_id": store_id})
-    if not doc:
+    doc = await find_store_doc(db, store_slug)
+    if not doc or doc.get("is_admin"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tienda no encontrada")
-    count = await db.books.count_documents({"owner_id": store_id})
+    owner_id = str(doc["_id"])
+    count = await db.books.count_documents({"owner_id": owner_id})
     return _store_from_doc(doc, count)
 
 
-@router.get("/stores/{store_id}/books", response_model=list[BookListPublic])
-async def get_store_books(store_id: str, q: Optional[str] = None):
+@router.get("/stores/{store_slug}/books", response_model=list[BookListPublic])
+async def get_store_books(store_slug: str, q: Optional[str] = None):
     db = get_db()
-    owner = await db.users.find_one({"_id": store_id})
-    if not owner:
+    owner = await find_store_doc(db, store_slug)
+    if not owner or owner.get("is_admin"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tienda no encontrada")
-    query: dict = {"owner_id": store_id}
+    owner_id = str(owner["_id"])
+    query: dict = {"owner_id": owner_id}
     if q:
         query["$or"] = [
             {"titulo": {"$regex": q, "$options": "i"}},
@@ -147,6 +171,7 @@ async def get_store_books(store_id: str, q: Optional[str] = None):
         "whatsapp_number": owner["whatsapp_number"],
         "municipios_envio": owner.get("municipios_envio", []) or [],
         "foto_tienda_url": owner.get("foto_tienda_url"),
+        "tienda_slug": owner.get("tienda_slug"),
     }
     cursor = db.books.find(query, LIST_BOOK_PROJECTION).sort("fecha_creacion", -1)
     return [book_list_from_doc(doc, owner_doc) async for doc in cursor]

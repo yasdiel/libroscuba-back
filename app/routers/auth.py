@@ -13,6 +13,7 @@ from app.utils.auth import (
     user_from_doc,
     verify_password_async,
 )
+from app.utils.store_slug import allocate_tienda_slug, nombre_tienda_taken
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
@@ -42,6 +43,12 @@ async def register(payload: UserCreate):
             status_code=status.HTTP_409_CONFLICT,
             detail="Ya existe una cuenta con este número. Inicia sesión en su lugar.",
         )
+    if await nombre_tienda_taken(db, payload.nombre_tienda):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ya existe una tienda con ese nombre. Elige otro nombre.",
+        )
+    tienda_slug = await allocate_tienda_slug(db, payload.nombre_tienda)
     user_id = str(uuid4())
     hashed = await hash_password_async(payload.password)
     doc = {
@@ -50,7 +57,8 @@ async def register(payload: UserCreate):
         "whatsapp_number": phone,
         "provincia": payload.provincia,
         "municipio": payload.municipio,
-        "nombre_tienda": payload.nombre_tienda,
+        "nombre_tienda": payload.nombre_tienda.strip(),
+        "tienda_slug": tienda_slug,
         "municipios_envio": payload.municipios_envio,
         "is_admin": False,
         "created_at": datetime.now(timezone.utc),
@@ -86,6 +94,7 @@ async def me(current: UserInDB = Depends(get_current_user)):
         provincia=current.provincia,
         municipio=current.municipio,
         nombre_tienda=current.nombre_tienda,
+        tienda_slug=current.tienda_slug,
         municipios_envio=current.municipios_envio,
         is_admin=current.is_admin,
         foto_tienda_url=current.foto_tienda_url,

@@ -62,6 +62,7 @@ def user_from_doc(doc: dict) -> UserInDB:
         is_admin=doc.get("is_admin", False),
         created_at=doc.get("created_at", datetime.now(timezone.utc)),
         foto_tienda_url=doc.get("foto_tienda_url"),
+        tienda_slug=doc.get("tienda_slug") or "",
     )
 
 

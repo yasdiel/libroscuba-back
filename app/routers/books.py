@@ -16,8 +16,16 @@ from app.services.books_query import (
 )
 from app.services.cloudinary_service import delete_image, extract_public_id
 from app.utils.auth import get_current_user
+from app.utils.store_slug import find_store_doc
 
 router = APIRouter(prefix="/api/books", tags=["books"])
+
+
+def _vendedor_tienda_slug(vendedor: Optional[dict]) -> Optional[str]:
+    if not vendedor:
+        return None
+    slug = vendedor.get("tienda_slug")
+    return slug if slug else None
 
 
 def book_from_doc(doc: dict, vendedor: Optional[dict] = None) -> BookPublic:
@@ -38,6 +46,7 @@ def book_from_doc(doc: dict, vendedor: Optional[dict] = None) -> BookPublic:
         vendedor_foto_tienda_url=(
             optional_image_url_for_response(vendedor.get("foto_tienda_url")) if vendedor else None
         ),
+        vendedor_tienda_slug=_vendedor_tienda_slug(vendedor),
         vendedor_municipios_envio=(vendedor.get("municipios_envio") if vendedor else None) or [],
     )
 
@@ -59,6 +68,7 @@ def book_list_from_doc(doc: dict, vendedor: Optional[dict] = None) -> BookListPu
         vendedor_foto_tienda_url=(
             optional_image_url_for_response(vendedor.get("foto_tienda_url")) if vendedor else None
         ),
+        vendedor_tienda_slug=_vendedor_tienda_slug(vendedor),
         vendedor_municipios_envio=(vendedor.get("municipios_envio") if vendedor else None) or [],
     )
 
@@ -91,7 +101,7 @@ async def get_book(book_id: str):
     doc = await db.books.find_one({"_id": book_id})
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Libro no encontrado")
-    owner = await db.users.find_one({"_id": doc["owner_id"]})
+    owner = await find_store_doc(db, doc["owner_id"])
     return book_from_doc(doc, owner)
 
 
@@ -124,6 +134,7 @@ async def create_book(payload: BookCreate, current: UserInDB = Depends(get_curre
         "whatsapp_number": current.whatsapp_number,
         "municipios_envio": current.municipios_envio,
         "foto_tienda_url": current.foto_tienda_url,
+        "tienda_slug": current.tienda_slug,
     }
     return book_from_doc(doc, owner_doc)
 
@@ -156,7 +167,7 @@ async def update_book(
     if updates:
         await db.books.update_one({"_id": book_id}, {"$set": updates})
     doc = await db.books.find_one({"_id": book_id})
-    owner = await db.users.find_one({"_id": doc["owner_id"]})
+    owner = await find_store_doc(db, doc["owner_id"])
     return book_from_doc(doc, owner)
 
 

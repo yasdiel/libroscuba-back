@@ -5,6 +5,7 @@ from app.models.book import BookWithOwner
 from app.models.user import UserInDB, UserStorePublic
 from app.routers.books import book_from_doc
 from app.services.cloudinary_service import delete_image
+from app.utils.store_slug import ensure_tienda_slug_on_user
 from app.utils.auth import require_admin
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -59,11 +60,15 @@ async def admin_list_stores(
         ]
     stores = []
     async for doc in db.users.find(query).sort("nombre_tienda", 1):
+        if not doc.get("tienda_slug"):
+            await ensure_tienda_slug_on_user(db, doc)
+            doc = await db.users.find_one({"_id": doc["_id"]}) or doc
         count = await db.books.count_documents({"owner_id": str(doc["_id"])})
         stores.append(
             UserStorePublic(
                 id=str(doc["_id"]),
                 nombre_tienda=doc["nombre_tienda"],
+                tienda_slug=doc["tienda_slug"],
                 provincia=doc["provincia"],
                 municipio=doc["municipio"],
                 whatsapp_number=doc["whatsapp_number"],
