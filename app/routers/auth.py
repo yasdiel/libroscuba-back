@@ -5,7 +5,21 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.data.cuba_locations import is_valid_location, is_valid_municipio
 from app.database import get_db
-from app.models.user import LoginRequest, Token, UserCreate, UserInDB, UserPublic
+from app.models.user import (
+    LoginRequest,
+    SendRegisterOtpRequest,
+    Token,
+    UserCreate,
+    UserInDB,
+    UserPublic,
+)
+from app.services.email_otp import (
+    create_and_store_otp,
+    email_already_registered,
+    normalize_email,
+    verify_otp,
+)
+from app.services.email_sender import send_register_otp_email
 from app.utils.auth import (
     create_access_token,
     get_current_user,
@@ -14,7 +28,24 @@ from app.utils.auth import (
     verify_password_async,
 )
 from app.utils.store_slug import allocate_tienda_slug, nombre_tienda_taken
+
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+@router.post("/register/send-otp", status_code=status.HTTP_204_NO_CONTENT)
+async def send_register_otp(payload: SendRegisterOtpRequest):
+    email = normalize_email(str(payload.email))
+    db = get_db()
+    if await email_already_registered(db, email):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ya existe una cuenta con este correo. Inicia sesión en su lugar.",
+        )
+    try:
+        code = await create_and_store_otp(db, email)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e)) from e
+    await send_register_otp_email(email, code)
 
 
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
@@ -35,24 +66,40 @@ async def register(payload: UserCreate):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Municipios de envío inválidos: {', '.join(invalid_envio)}",
         )
-    phone = payload.whatsapp_number
+
+    email = normalize_email(str(payload.email))
     db = get_db()
-    existing = await db.users.find_one({"whatsapp_number": phone})
-    if existing:
+
+    if not await verify_otp(db, email, payload.otp):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Código incorrecto o expirado. Solicita uno nuevo.",
+        )
+
+    phone = payload.whatsapp_number
+    existing_phone = await db.users.find_one({"whatsapp_number": phone})
+    if existing_phone:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Ya existe una cuenta con este número. Inicia sesión en su lugar.",
+        )
+    if await email_already_registered(db, email):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ya existe una cuenta con este correo. Inicia sesión en su lugar.",
         )
     if await nombre_tienda_taken(db, payload.nombre_tienda):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Ya existe una tienda con ese nombre. Elige otro nombre.",
         )
+
     tienda_slug = await allocate_tienda_slug(db, payload.nombre_tienda)
     user_id = str(uuid4())
     hashed = await hash_password_async(payload.password)
     doc = {
         "_id": user_id,
+        "email": email,
         "hashed_password": hashed,
         "whatsapp_number": phone,
         "provincia": payload.provincia,
@@ -90,6 +137,7 @@ async def login(payload: LoginRequest):
 async def me(current: UserInDB = Depends(get_current_user)):
     return UserPublic(
         id=current.id,
+        email=current.email,
         whatsapp_number=current.whatsapp_number,
         provincia=current.provincia,
         municipio=current.municipio,

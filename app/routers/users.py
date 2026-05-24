@@ -24,6 +24,7 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 def _user_to_public(user: UserInDB) -> UserPublic:
     return UserPublic(
         id=user.id,
+        email=user.email,
         whatsapp_number=user.whatsapp_number,
         provincia=user.provincia,
         municipio=user.municipio,

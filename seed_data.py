@@ -22,6 +22,7 @@ from app.utils.store_slug import allocate_tienda_slug
 
 ADMIN = {
     "password": "admin123",
+    "email": "admin@libroscuba.local",
     "nombre_tienda": "Administración LibrosCuba",
     "whatsapp_number": "+5350000000",
     "provincia": "La Habana",
@@ -45,6 +46,7 @@ async def reset_to_admin_only() -> None:
         {
             "_id": admin_id,
             "hashed_password": hash_password(ADMIN["password"]),
+            "email": ADMIN["email"],
             "whatsapp_number": ADMIN["whatsapp_number"],
             "provincia": ADMIN["provincia"],
             "municipio": ADMIN["municipio"],

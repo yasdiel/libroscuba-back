@@ -14,6 +14,14 @@ class Settings(BaseSettings):
     cloudinary_api_secret: str = ""
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
+    # Verificación de registro por email (OTP)
+    otp_expire_minutes: int = 5
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip().rstrip("/") for o in self.cors_origins.split(",") if o.strip()]
