@@ -21,7 +21,7 @@ from app.utils.auth import hash_password
 from app.utils.store_slug import allocate_tienda_slug
 
 ADMIN = {
-    "password": "admin123",
+    "password": "libroscuba2032",
     "email": "admin@libroscuba.local",
     "nombre_tienda": "Administración LibrosCuba",
     "whatsapp_number": "+5350000000",

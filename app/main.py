@@ -16,12 +16,12 @@ async def lifespan(_: FastAPI):
     await connect_db()
     configure_cloudinary()
     log = logging.getLogger("uvicorn.error")
-    if settings.smtp_configured:
-        log.info("[LibrosCuba] SMTP listo (%s)", settings.smtp_host)
+    if settings.email_configured:
+        log.info("[LibrosCuba] Email listo (proveedor: %s)", settings.email_provider)
     else:
         log.warning(
-            "[LibrosCuba] SMTP incompleto — faltan: %s",
-            ", ".join(settings.smtp_missing_fields()) or "SMTP_*",
+            "[LibrosCuba] Email no configurado — %s",
+            ", ".join(settings.email_missing_env()) or "RESEND_* o SMTP_*",
         )
     yield
     await close_db()
@@ -61,8 +61,9 @@ async def health():
         "status": "ok",
         "service": "libroscuba",
         "database": "connected",
-        "email_configured": settings.smtp_configured,
-        "email_missing_env": settings.smtp_missing_fields(),
+        "email_configured": settings.email_configured,
+        "email_provider": settings.email_provider,
+        "email_missing_env": settings.email_missing_env(),
     }
 
 
