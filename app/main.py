@@ -11,18 +11,8 @@ from app.services.cloudinary_service import configure_cloudinary
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    import logging
-
     await connect_db()
     configure_cloudinary()
-    log = logging.getLogger("uvicorn.error")
-    if settings.email_configured:
-        log.info("[LibrosCuba] Email listo (proveedor: %s)", settings.email_provider)
-    else:
-        log.warning(
-            "[LibrosCuba] Email no configurado — %s",
-            ", ".join(settings.email_missing_env()) or "OTPCUBA_API_KEY y OTPCUBA_TOKEN_SECRET",
-        )
     yield
     await close_db()
 
@@ -61,9 +51,6 @@ async def health():
         "status": "ok",
         "service": "libroscuba",
         "database": "connected",
-        "email_configured": settings.email_configured,
-        "email_provider": settings.email_provider,
-        "email_missing_env": settings.email_missing_env(),
     }
 
 

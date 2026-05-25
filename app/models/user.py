@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.services.media_url import validate_optional_image_url
 from app.utils.phone import normalize_phone
@@ -41,14 +41,8 @@ class UserBase(BaseModel):
         return _clean_municipios(v)
 
 
-class SendRegisterOtpRequest(BaseModel):
-    email: EmailStr
-
-
 class UserCreate(UserBase):
-    email: EmailStr
     password: str = Field(..., min_length=6, max_length=128)
-    otp: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
     accepted_terms: bool = False
 
 
@@ -85,17 +79,19 @@ class UserUpdate(BaseModel):
 
 class UserInDB(UserBase):
     id: str
-    email: str
     hashed_password: str
     is_admin: bool = False
+    is_banned: bool = False
     created_at: datetime
     foto_tienda_url: Optional[str] = None
     tienda_slug: str = ""
+    email: Optional[str] = None
+    banned_at: Optional[datetime] = None
+    ban_reason: Optional[str] = None
 
 
 class UserPublic(BaseModel):
     id: str
-    email: str
     whatsapp_number: str
     provincia: str
     municipio: str

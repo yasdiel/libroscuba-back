@@ -23,8 +23,10 @@ async def _ensure_indexes(database: AsyncIOMotorDatabase) -> None:
     await database.users.create_index("whatsapp_number", unique=True)
     await database.users.create_index("email", unique=True, sparse=True)
     await database.users.create_index("tienda_slug", unique=True, sparse=True)
+    await database.users.create_index("is_banned")
 
-    await database.email_otps.create_index("expires_at", expireAfterSeconds=0)
+    await database.book_reports.create_index("status")
+    await database.book_reports.create_index("created_at")
     await database.users.create_index("provincia")
     await database.users.create_index("municipio")
     await database.users.create_index("municipios_envio")

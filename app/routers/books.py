@@ -7,18 +7,32 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from app.data.cuba_locations import is_valid_location
 from app.database import get_db
 from app.models.book import BookCreate, BookInDB, BookListPublic, BookPublic, BookUpdate
+from app.models.report import BookReportCreate
 from app.services.media_url import image_url_for_response, optional_image_url_for_response
 from app.models.user import UserInDB
+from app.services.book_reports import banned_owner_ids, create_book_report
 from app.services.books_query import (
     build_book_filter,
     fetch_books_page,
     owner_ids_for_location,
 )
 from app.services.cloudinary_service import delete_image, extract_public_id
-from app.utils.auth import get_current_user
+from app.utils.auth import get_current_user, get_optional_user
 from app.utils.store_slug import find_store_doc
 
 router = APIRouter(prefix="/api/books", tags=["books"])
+
+
+async def _exclude_banned_owners(
+    db, book_match: dict
+) -> dict:
+    banned = await banned_owner_ids(db)
+    if not banned:
+        return book_match
+    clause = {"owner_id": {"$nin": banned}}
+    if not book_match:
+        return clause
+    return {"$and": [book_match, clause]}
 
 
 def _vendedor_tienda_slug(vendedor: Optional[dict]) -> Optional[str]:
@@ -92,6 +106,7 @@ async def list_books(
         municipio=municipio,
         owner_ids=owner_ids,
     )
+    book_match = await _exclude_banned_owners(db, book_match)
     return await fetch_books_page(db, book_match, skip, limit, book_list_from_doc)
 
 
@@ -102,7 +117,26 @@ async def get_book(book_id: str):
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Libro no encontrado")
     owner = await find_store_doc(db, doc["owner_id"])
+    if owner and owner.get("is_banned"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Libro no encontrado")
     return book_from_doc(doc, owner)
+
+
+@router.post("/{book_id}/report", status_code=status.HTTP_204_NO_CONTENT)
+async def report_book(
+    book_id: str,
+    payload: BookReportCreate,
+    current: UserInDB | None = Depends(get_optional_user),
+):
+    db = get_db()
+    await create_book_report(
+        db,
+        book_id=book_id,
+        reporter_id=current.id if current else None,
+        reason=payload.reason,
+        details=payload.details,
+    )
+    return None
 
 
 @router.post("", response_model=BookPublic, status_code=status.HTTP_201_CREATED)

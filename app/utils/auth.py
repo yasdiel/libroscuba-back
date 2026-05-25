@@ -10,7 +10,6 @@ from passlib.context import CryptContext
 from app.config import settings
 from app.database import get_db
 from app.models.user import UserInDB
-
 # bcrypt rounds = 10 (≈100ms en CPU normal; el default 12 toma ~400ms y
 # ahoga el plan free de Render). Suficiente para una demo.
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=10)
@@ -60,10 +59,13 @@ def user_from_doc(doc: dict) -> UserInDB:
         nombre_tienda=doc["nombre_tienda"],
         municipios_envio=doc.get("municipios_envio", []) or [],
         is_admin=doc.get("is_admin", False),
+        is_banned=bool(doc.get("is_banned")),
         created_at=doc.get("created_at", datetime.now(timezone.utc)),
+        banned_at=doc.get("banned_at"),
+        ban_reason=doc.get("ban_reason"),
         foto_tienda_url=doc.get("foto_tienda_url"),
         tienda_slug=doc.get("tienda_slug") or "",
-        email=doc.get("email") or "",
+        email=doc.get("email"),
     )
 
 
@@ -78,7 +80,13 @@ async def get_current_user(
     doc = await get_db().users.find_one({"_id": user_id})
     if not doc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario no encontrado")
-    return user_from_doc(doc)
+    user = user_from_doc(doc)
+    if not user.is_admin and user.is_banned:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tu cuenta está suspendida. Contacta al administrador.",
+        )
+    return user
 
 
 async def get_optional_user(

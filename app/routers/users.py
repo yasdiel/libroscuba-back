@@ -24,7 +24,6 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 def _user_to_public(user: UserInDB) -> UserPublic:
     return UserPublic(
         id=user.id,
-        email=user.email,
         whatsapp_number=user.whatsapp_number,
         provincia=user.provincia,
         municipio=user.municipio,
@@ -134,7 +133,7 @@ def _store_from_doc(doc: dict, count: int) -> UserStorePublic:
 async def list_stores():
     db = get_db()
     stores = []
-    async for doc in db.users.find({"is_admin": {"$ne": True}}):
+    async for doc in db.users.find({"is_admin": {"$ne": True}, "is_banned": {"$ne": True}}):
         if not doc.get("tienda_slug"):
             await ensure_tienda_slug_on_user(db, doc)
             doc = await db.users.find_one({"_id": doc["_id"]}) or doc
@@ -147,7 +146,7 @@ async def list_stores():
 async def get_store(store_slug: str):
     db = get_db()
     doc = await find_store_doc(db, store_slug)
-    if not doc or doc.get("is_admin"):
+    if not doc or doc.get("is_admin") or doc.get("is_banned"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tienda no encontrada")
     owner_id = str(doc["_id"])
     count = await db.books.count_documents({"owner_id": owner_id})
@@ -158,7 +157,7 @@ async def get_store(store_slug: str):
 async def get_store_books(store_slug: str, q: Optional[str] = None):
     db = get_db()
     owner = await find_store_doc(db, store_slug)
-    if not owner or owner.get("is_admin"):
+    if not owner or owner.get("is_admin") or owner.get("is_banned"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tienda no encontrada")
     owner_id = str(owner["_id"])
     query: dict = {"owner_id": owner_id}

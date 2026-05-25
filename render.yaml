@@ -34,11 +34,3 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
-      - key: OTP_EXPIRE_MINUTES
-        value: "5"
-      - key: OTPCUBA_API_KEY
-        sync: false
-      - key: OTPCUBA_TOKEN_SECRET
-        sync: false
-      - key: OTPCUBA_BASE_URL
-        value: https://otp.noxcreation.dev
