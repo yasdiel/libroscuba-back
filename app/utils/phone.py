@@ -18,10 +18,7 @@ CUBA_MOBILE_TWO_DIGIT_PREFIXES = frozenset(
     _CUBA_MOBILE_LEGACY_PREFIXES | {_CUBA_MOBILE_NEW_PREFIX}
 )
 
-INVALID_MOBILE_PREFIX_MSG = (
-    "Prefijo de móvil inválido. Los celulares en Cuba empiezan por 5 "
-    "(ej. 55, 52) o por 63 (ej. 63123456) después del +53."
-)
+INVALID_MOBILE_PREFIX_MSG = "Inserte un número válido."
 
 
 def _digits_only(phone: str) -> str:
@@ -31,9 +28,7 @@ def _digits_only(phone: str) -> str:
 def validate_cuba_mobile_local_digits(digits: str) -> None:
     """Valida los 8 dígitos nacionales (sin +53) para línea móvil cubana."""
     if len(digits) != CUBA_LOCAL_DIGITS or not digits.isdigit():
-        raise ValueError(
-            f"El teléfono debe tener exactamente {CUBA_LOCAL_DIGITS} dígitos numéricos"
-        )
+        raise ValueError(INVALID_MOBILE_PREFIX_MSG)
     prefix = digits[:2]
     if prefix not in CUBA_MOBILE_TWO_DIGIT_PREFIXES:
         raise ValueError(INVALID_MOBILE_PREFIX_MSG)
