@@ -14,12 +14,12 @@ from app.models.user import (
     UserPublic,
 )
 from app.services.email_otp import (
-    create_and_store_otp,
     email_already_registered,
     normalize_email,
-    verify_otp,
+    send_register_email_otp,
+    verify_register_email_otp,
 )
-from app.services.email_sender import send_register_otp_email
+from app.services.otpcuba_client import OTPCubaError, raise_http_from_otpcuba
 from app.utils.auth import (
     create_access_token,
     get_current_user,
@@ -42,10 +42,11 @@ async def send_register_otp(payload: SendRegisterOtpRequest):
             detail="Ya existe una cuenta con este correo. Inicia sesión en su lugar.",
         )
     try:
-        code = await create_and_store_otp(db, email)
+        await send_register_email_otp(db, email)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e)) from e
-    await send_register_otp_email(email, code)
+    except OTPCubaError as e:
+        raise_http_from_otpcuba(e)
 
 
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
@@ -70,7 +71,11 @@ async def register(payload: UserCreate):
     email = normalize_email(str(payload.email))
     db = get_db()
 
-    if not await verify_otp(db, email, payload.otp):
+    try:
+        otp_ok = await verify_register_email_otp(db, email, payload.otp)
+    except OTPCubaError as e:
+        raise_http_from_otpcuba(e)
+    if not otp_ok:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Código incorrecto o expirado. Solicita uno nuevo.",

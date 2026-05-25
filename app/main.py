@@ -21,7 +21,7 @@ async def lifespan(_: FastAPI):
     else:
         log.warning(
             "[LibrosCuba] Email no configurado — %s",
-            ", ".join(settings.email_missing_env()) or "RESEND_* o SMTP_*",
+            ", ".join(settings.email_missing_env()) or "OTPCUBA_API_KEY y OTPCUBA_TOKEN_SECRET",
         )
     yield
     await close_db()

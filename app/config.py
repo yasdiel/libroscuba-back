@@ -1,6 +1,6 @@
 import os
 
-from pydantic import AliasChoices, Field, model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,39 +31,16 @@ class Settings(BaseSettings):
 
     otp_expire_minutes: int = Field(default=5, validation_alias="OTP_EXPIRE_MINUTES")
 
-    # Resend (HTTPS) — recomendado en Render (el plan free bloquea SMTP saliente).
-    resend_api_key: str = ""
-    resend_from: str = ""
-
-    # SMTP (Gmail, etc.) — funciona en local; en Render suele fallar con "Network is unreachable".
-    smtp_host: str = Field(
-        default="",
-        validation_alias=AliasChoices("SMTP_HOST", "SMPT_HOST"),
-    )
-    smtp_port: int = Field(default=587, validation_alias="SMTP_PORT")
-    smtp_user: str = Field(
-        default="",
-        validation_alias=AliasChoices("SMTP_USER", "SMPT_USER"),
-    )
-    smtp_password: str = Field(
-        default="",
-        validation_alias=AliasChoices("SMTP_PASSWORD", "SMPT_PASSWORD"),
-    )
-    smtp_from: str = Field(
-        default="",
-        validation_alias=AliasChoices("SMTP_FROM", "SMPT_FROM"),
-    )
+    # OTP Cuba — envío y verificación OTP por email (HTTPS, funciona en Render).
+    otpcuba_api_key: str = ""
+    otpcuba_token_secret: str = ""
+    otpcuba_base_url: str = "https://otp.noxcreation.dev"
 
     @model_validator(mode="after")
-    def normalize_email_settings(self) -> "Settings":
-        self.resend_api_key = self.resend_api_key.strip()
-        self.resend_from = self.resend_from.strip()
-        self.smtp_host = self.smtp_host.strip()
-        self.smtp_user = self.smtp_user.strip()
-        self.smtp_password = self.smtp_password.strip().replace(" ", "")
-        self.smtp_from = self.smtp_from.strip()
-        if self.smtp_user and not self.smtp_from:
-            self.smtp_from = self.smtp_user
+    def normalize_otpcuba_settings(self) -> "Settings":
+        self.otpcuba_api_key = self.otpcuba_api_key.strip()
+        self.otpcuba_token_secret = self.otpcuba_token_secret.strip()
+        self.otpcuba_base_url = self.otpcuba_base_url.strip().rstrip("/")
         return self
 
     @property
@@ -71,53 +48,23 @@ class Settings(BaseSettings):
         return [o.strip().rstrip("/") for o in self.cors_origins.split(",") if o.strip()]
 
     @property
-    def resend_configured(self) -> bool:
-        return bool(self.resend_api_key and self.resend_from)
-
-    def smtp_missing_fields(self) -> list[str]:
-        missing: list[str] = []
-        if not self.smtp_host:
-            missing.append("SMTP_HOST")
-        if not self.smtp_user:
-            missing.append("SMTP_USER")
-        if not self.smtp_password:
-            missing.append("SMTP_PASSWORD")
-        if not self.smtp_from:
-            missing.append("SMTP_FROM")
-        return missing
-
-    @property
-    def smtp_configured(self) -> bool:
-        return len(self.smtp_missing_fields()) == 0
+    def otpcuba_configured(self) -> bool:
+        return bool(self.otpcuba_api_key and self.otpcuba_token_secret)
 
     @property
     def email_configured(self) -> bool:
-        return self.resend_configured or self.smtp_configured
+        return self.otpcuba_configured
 
     @property
     def email_provider(self) -> str:
-        if self.resend_configured:
-            return "resend"
-        if self.smtp_configured:
-            return "smtp"
-        return "none"
+        return "otpcuba" if self.otpcuba_configured else "none"
 
     def email_missing_env(self) -> list[str]:
-        if self.resend_configured:
-            return []
-        if self.smtp_configured and os.getenv("RENDER"):
-            return [
-                "RESEND_API_KEY y RESEND_FROM (Render bloquea Gmail SMTP; usa Resend)"
-            ]
-        if self.smtp_configured:
-            return []
-        missing = []
-        if not self.resend_api_key:
-            missing.append("RESEND_API_KEY")
-        if not self.resend_from:
-            missing.append("RESEND_FROM")
-        if not self.smtp_configured:
-            missing.extend(self.smtp_missing_fields())
+        missing: list[str] = []
+        if not self.otpcuba_api_key:
+            missing.append("OTPCUBA_API_KEY")
+        if not self.otpcuba_token_secret:
+            missing.append("OTPCUBA_TOKEN_SECRET")
         return missing
 
 
