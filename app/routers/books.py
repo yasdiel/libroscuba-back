@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.data.cuba_locations import is_valid_location
 from app.database import get_db
-from app.models.book import BookCreate, BookInDB, BookListPublic, BookPublic, BookUpdate
+from app.models.book import BookCreate, BookInDB, BookListPublic, BookPublic, BookUpdate, CartSyncBody
 from app.models.report import BookReportCreate
 from app.services.media_url import image_url_for_response, optional_image_url_for_response
 from app.models.user import UserInDB
@@ -108,6 +108,25 @@ async def list_books(
     )
     book_match = await _exclude_banned_owners(db, book_match)
     return await fetch_books_page(db, book_match, skip, limit, book_list_from_doc)
+
+
+@router.post("/cart-sync", response_model=list[BookListPublic])
+async def sync_cart_books(payload: CartSyncBody):
+    """Devuelve los libros del carrito que siguen publicados (excluye baneados/eliminados)."""
+    if not payload.book_ids:
+        return []
+    db = get_db()
+    banned = await banned_owner_ids(db)
+    owner_filter: dict = {}
+    if banned:
+        owner_filter["owner_id"] = {"$nin": banned}
+    books: list[BookListPublic] = []
+    async for doc in db.books.find({"_id": {"$in": payload.book_ids}, **owner_filter}):
+        owner = await find_store_doc(db, doc["owner_id"])
+        books.append(book_list_from_doc(doc, owner))
+    order = {bid: i for i, bid in enumerate(payload.book_ids)}
+    books.sort(key=lambda b: order.get(b.id, 999))
+    return books
 
 
 @router.get("/{book_id}", response_model=BookPublic)

@@ -23,6 +23,10 @@ class BookBase(BaseModel):
     municipio: str
 
 
+class CartSyncBody(BaseModel):
+    book_ids: list[str] = Field(default_factory=list, max_length=100)
+
+
 class BookCreate(BookBase):
     @field_validator("foto_url", mode="before")
     @classmethod
