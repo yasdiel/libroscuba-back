@@ -44,10 +44,43 @@ def _parse_expires_at(value: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def _error_message(data: dict | None, fallback: str) -> str:
-    if not data:
+def _error_message(data: dict | None, fallback: str, raw_text: str = "") -> str:
+    if data:
+        for key in ("error", "message", "detail", "msg"):
+            value = data.get(key)
+            if value:
+                return str(value)
+    text = (raw_text or "").strip()
+    if text and text.startswith("{"):
         return fallback
-    return str(data.get("error") or data.get("message") or fallback)
+    if text and len(text) <= 500:
+        return text
+    return fallback
+
+
+def _user_message_for_status(status_code: int, api_message: str) -> str:
+    """Mensajes claros para el usuario según el código HTTP de OTP Cuba."""
+    lower = api_message.lower()
+    if status_code == 402 or "saldo" in lower:
+        return (
+            "El saldo de OTP Cuba es solo para SMS. El registro por correo es gratuito; "
+            "revisa que OTPCUBA_API_KEY y OTPCUBA_TOKEN_SECRET no estén intercambiados en Render."
+        )
+    if status_code == 403:
+        return (
+            "OTP Cuba rechazó el envío por correo (403). El email OTP es gratuito; esto suele indicar "
+            "aplicación inactiva en el dashboard, claves mal configuradas en Render "
+            "(API Key = APP-..., Token Secret = OTP-...) o límites de la cuenta. "
+            f"Detalle del proveedor: {api_message}"
+        )
+    if status_code == 401:
+        return (
+            "Claves de OTP Cuba inválidas. En Render: OTPCUBA_API_KEY debe ser la clave APP-... "
+            "y OTPCUBA_TOKEN_SECRET la clave OTP-... (no las intercambies)."
+        )
+    if status_code == 429:
+        return api_message
+    return api_message
 
 
 async def send_email_otp(email: str) -> OTPSendResult:
@@ -74,6 +107,7 @@ async def send_email_otp(email: str) -> OTPSendResult:
             status_code=503,
         ) from e
 
+    raw_text = response.text
     data: dict | None = None
     if response.headers.get("content-type", "").startswith("application/json"):
         try:
@@ -82,8 +116,14 @@ async def send_email_otp(email: str) -> OTPSendResult:
             data = None
 
     if response.status_code >= 400:
-        msg = _error_message(data, "No se pudo enviar el código por correo.")
-        logger.error("OTP Cuba send %s: %s", response.status_code, msg)
+        api_msg = _error_message(data, "No se pudo enviar el código por correo.", raw_text)
+        msg = _user_message_for_status(response.status_code, api_msg)
+        logger.error(
+            "OTP Cuba send %s: %s (body=%s)",
+            response.status_code,
+            api_msg,
+            raw_text[:500],
+        )
         raise OTPCubaError(msg, status_code=response.status_code)
 
     if not data or not data.get("hash"):
@@ -145,10 +185,10 @@ def raise_http_from_otpcuba(err: OTPCubaError) -> None:
     code = err.status_code or status.HTTP_503_SERVICE_UNAVAILABLE
     if code == 400:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err.message)
-    if code == 401:
+    if code in (401, 403, 402):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Servicio de correo mal configurado. Revisa las claves en OTP Cuba.",
+            detail=err.message,
         )
     if code == 429:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=err.message)
