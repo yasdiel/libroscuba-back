@@ -14,18 +14,7 @@ class ConvertRequest(BaseModel):
 
 @router.get("")
 async def list_currencies():
-    try:
-        return await build_currencies_payload()
-    except RuntimeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(exc),
-        ) from exc
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="No se pudieron obtener las tasas de elTOQUE",
-        ) from exc
+    return await build_currencies_payload()
 
 
 @router.post("/convert")

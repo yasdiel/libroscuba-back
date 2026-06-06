@@ -1,5 +1,6 @@
 import os
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,7 +28,10 @@ class Settings(BaseSettings):
     cloudinary_api_key: str = ""
     cloudinary_api_secret: str = ""
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
-    eltoque_api_token: str = ""
+    eltoque_api_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("EL_TOQUE_API_TOKEN", "ELTOQUE_API_TOKEN"),
+    )
 
     @property
     def cors_origin_list(self) -> list[str]:

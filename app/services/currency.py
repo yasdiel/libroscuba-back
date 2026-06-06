@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
+import httpx
 from fastapi import HTTPException, status
 
 from app.services.eltoque import fetch_trmi_raw
+
+logger = logging.getLogger(__name__)
 
 BASE_CURRENCY = "CUP"
 DEFAULT_ACCEPTED = [BASE_CURRENCY]
@@ -66,7 +70,12 @@ def normalize_monedas(values: list[str] | None, *, available: set[str]) -> list[
 async def get_rates_cup_per_unit() -> dict[str, float]:
     """Cuántos CUP equivale 1 unidad de cada moneda."""
     rates: dict[str, float] = {BASE_CURRENCY: 1.0}
-    raw = await fetch_trmi_raw()
+    try:
+        raw = await fetch_trmi_raw()
+    except (RuntimeError, httpx.HTTPError) as exc:
+        logger.warning("Tasas elTOQUE no disponibles, usando solo CUP: %s", exc)
+        return rates
+
     tasas = raw.get("tasas") or {}
     for api_code, value in tasas.items():
         app_code = API_CODE_MAP.get(str(api_code).upper())
@@ -87,7 +96,23 @@ async def available_currency_codes() -> set[str]:
 
 
 async def build_currencies_payload() -> dict[str, Any]:
-    raw = await fetch_trmi_raw()
+    try:
+        raw = await fetch_trmi_raw()
+    except (RuntimeError, httpx.HTTPError) as exc:
+        logger.warning("Listado de monedas elTOQUE no disponible: %s", exc)
+        return {
+            "base": BASE_CURRENCY,
+            "date": None,
+            "time": None,
+            "currencies": [
+                {
+                    "code": BASE_CURRENCY,
+                    "label": currency_label(BASE_CURRENCY),
+                    "rate_cup": 1.0,
+                }
+            ],
+        }
+
     rates = await get_rates_cup_per_unit()
     currencies = [
         {
