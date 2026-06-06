@@ -3,6 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.services.currency import DEFAULT_ACCEPTED
 from app.services.media_url import validate_optional_image_url
 from app.utils.phone import normalize_phone
 
@@ -26,6 +27,7 @@ class UserBase(BaseModel):
     municipio: str = Field(..., min_length=1)
     nombre_tienda: str = Field(..., min_length=2, max_length=80)
     municipios_envio: list[str] = Field(default_factory=list)
+    monedas_aceptadas: list[str] = Field(default_factory=lambda: list(DEFAULT_ACCEPTED))
 
     @field_validator("whatsapp_number", mode="before")
     @classmethod
@@ -40,6 +42,18 @@ class UserBase(BaseModel):
     def clean_envio(cls, v: Optional[list[str]]) -> list[str]:
         return _clean_municipios(v)
 
+    @field_validator("monedas_aceptadas", mode="before")
+    @classmethod
+    def clean_monedas(cls, v: Optional[list[str]]) -> list[str]:
+        if not v:
+            return list(DEFAULT_ACCEPTED)
+        cleaned: list[str] = []
+        for item in v:
+            code = str(item).strip().upper()
+            if code and code not in cleaned:
+                cleaned.append(code)
+        return cleaned or list(DEFAULT_ACCEPTED)
+
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=6, max_length=128)
@@ -52,6 +66,7 @@ class UserUpdate(BaseModel):
     municipio: Optional[str] = None
     nombre_tienda: Optional[str] = Field(None, min_length=2, max_length=80)
     municipios_envio: Optional[list[str]] = None
+    monedas_aceptadas: Optional[list[str]] = None
     foto_tienda_url: Optional[str] = Field(None, max_length=2048)
 
     @field_validator("foto_tienda_url", mode="before")
@@ -71,10 +86,22 @@ class UserUpdate(BaseModel):
 
     @field_validator("municipios_envio", mode="before")
     @classmethod
-    def clean_envio(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+    def clean_envio_update(cls, v: Optional[list[str]]) -> Optional[list[str]]:
         if v is None:
             return None
         return _clean_municipios(v)
+
+    @field_validator("monedas_aceptadas", mode="before")
+    @classmethod
+    def clean_monedas_update(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+        if v is None:
+            return None
+        cleaned: list[str] = []
+        for item in v:
+            code = str(item).strip().upper()
+            if code and code not in cleaned:
+                cleaned.append(code)
+        return cleaned or list(DEFAULT_ACCEPTED)
 
 
 class UserInDB(UserBase):
@@ -98,6 +125,7 @@ class UserPublic(BaseModel):
     nombre_tienda: str
     tienda_slug: str
     municipios_envio: list[str] = Field(default_factory=list)
+    monedas_aceptadas: list[str] = Field(default_factory=lambda: list(DEFAULT_ACCEPTED))
     is_admin: bool = False
     foto_tienda_url: Optional[str] = None
 

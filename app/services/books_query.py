@@ -13,6 +13,8 @@ LIST_BOOK_PROJECTION = {
     "titulo": 1,
     "autor": 1,
     "precio": 1,
+    "moneda": 1,
+    "monedas_aceptadas": 1,
     "foto_url": 1,
     "estado": 1,
     "provincia": 1,

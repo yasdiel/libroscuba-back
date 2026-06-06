@@ -4,6 +4,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.data.cuba_locations import is_valid_location, is_valid_municipio
+from app.services.currency import available_currency_codes, normalize_monedas, validate_book_currencies
 from app.database import get_db
 from app.models.user import LoginRequest, Token, UserCreate, UserInDB, UserPublic
 from app.utils.auth import (
@@ -37,6 +38,9 @@ async def register(payload: UserCreate):
             detail=f"Municipios de envío inválidos: {', '.join(invalid_envio)}",
         )
 
+    available = await available_currency_codes()
+    monedas_aceptadas = normalize_monedas(payload.monedas_aceptadas, available=available)
+
     db = get_db()
     phone = payload.whatsapp_number
     existing_phone = await db.users.find_one({"whatsapp_number": phone})
@@ -63,6 +67,7 @@ async def register(payload: UserCreate):
         "nombre_tienda": payload.nombre_tienda.strip(),
         "tienda_slug": tienda_slug,
         "municipios_envio": payload.municipios_envio,
+        "monedas_aceptadas": monedas_aceptadas,
         "is_admin": False,
         "created_at": datetime.now(timezone.utc),
     }
@@ -104,6 +109,7 @@ async def me(current: UserInDB = Depends(get_current_user)):
         nombre_tienda=current.nombre_tienda,
         tienda_slug=current.tienda_slug,
         municipios_envio=current.municipios_envio,
+        monedas_aceptadas=current.monedas_aceptadas,
         is_admin=current.is_admin,
         foto_tienda_url=current.foto_tienda_url,
     )

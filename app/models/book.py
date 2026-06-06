@@ -4,6 +4,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.services.currency import BASE_CURRENCY, DEFAULT_ACCEPTED
 from app.services.media_url import validate_image_url, validate_optional_image_url
 
 
@@ -23,11 +24,33 @@ class BookBase(BaseModel):
     municipio: str
 
 
+class BookCurrencyMixin(BaseModel):
+    moneda: str = Field(default=BASE_CURRENCY, min_length=3, max_length=8)
+    monedas_aceptadas: list[str] = Field(default_factory=lambda: list(DEFAULT_ACCEPTED))
+
+    @field_validator("moneda", mode="before")
+    @classmethod
+    def normalize_moneda(cls, v: object) -> str:
+        return str(v or BASE_CURRENCY).strip().upper()
+
+    @field_validator("monedas_aceptadas", mode="before")
+    @classmethod
+    def normalize_monedas(cls, v: object) -> list[str]:
+        if not v:
+            return list(DEFAULT_ACCEPTED)
+        cleaned: list[str] = []
+        for item in v:
+            code = str(item).strip().upper()
+            if code and code not in cleaned:
+                cleaned.append(code)
+        return cleaned or list(DEFAULT_ACCEPTED)
+
+
 class CartSyncBody(BaseModel):
     book_ids: list[str] = Field(default_factory=list, max_length=100)
 
 
-class BookCreate(BookBase):
+class BookCreate(BookBase, BookCurrencyMixin):
     @field_validator("foto_url", mode="before")
     @classmethod
     def check_foto_url(cls, v: object) -> str:
@@ -43,6 +66,8 @@ class BookUpdate(BaseModel):
     estado: Optional[EstadoLibro] = None
     provincia: Optional[str] = None
     municipio: Optional[str] = None
+    moneda: Optional[str] = Field(None, min_length=3, max_length=8)
+    monedas_aceptadas: Optional[list[str]] = None
 
     @field_validator("foto_url", mode="before")
     @classmethod
@@ -51,15 +76,34 @@ class BookUpdate(BaseModel):
             return None
         return validate_image_url(str(v), required=True)
 
+    @field_validator("moneda", mode="before")
+    @classmethod
+    def normalize_moneda(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        return str(v).strip().upper()
 
-class BookInDB(BookBase):
+    @field_validator("monedas_aceptadas", mode="before")
+    @classmethod
+    def normalize_monedas(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+        if v is None:
+            return None
+        cleaned: list[str] = []
+        for item in v:
+            code = str(item).strip().upper()
+            if code and code not in cleaned:
+                cleaned.append(code)
+        return cleaned or list(DEFAULT_ACCEPTED)
+
+
+class BookInDB(BookBase, BookCurrencyMixin):
     id: str
     owner_id: str
     fecha_creacion: datetime
     cloudinary_public_id: Optional[str] = None
 
 
-class BookPublic(BookBase):
+class BookPublic(BookBase, BookCurrencyMixin):
     id: str
     owner_id: str
     fecha_creacion: datetime
@@ -78,6 +122,8 @@ class BookListPublic(BaseModel):
     titulo: str
     autor: str
     precio: float
+    moneda: str = BASE_CURRENCY
+    monedas_aceptadas: list[str] = Field(default_factory=lambda: list(DEFAULT_ACCEPTED))
     foto_url: str
     estado: EstadoLibro
     provincia: str

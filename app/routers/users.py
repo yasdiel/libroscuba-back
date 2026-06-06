@@ -3,6 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.data.cuba_locations import is_valid_location, is_valid_municipio
+from app.services.currency import available_currency_codes, normalize_monedas
 from app.database import get_db
 from app.models.book import BookListPublic
 from app.models.user import UserInDB, UserPublic, UserStorePublic, UserUpdate
@@ -30,6 +31,7 @@ def _user_to_public(user: UserInDB) -> UserPublic:
         nombre_tienda=user.nombre_tienda,
         tienda_slug=user.tienda_slug,
         municipios_envio=user.municipios_envio,
+        monedas_aceptadas=user.monedas_aceptadas,
         is_admin=user.is_admin,
         foto_tienda_url=optional_image_url_for_response(user.foto_tienda_url),
     )
@@ -59,6 +61,11 @@ async def update_profile(payload: UserUpdate, current: UserInDB = Depends(get_cu
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Municipios de envío inválidos: {', '.join(invalid)}",
             )
+    if "monedas_aceptadas" in updates and updates["monedas_aceptadas"] is not None:
+        available = await available_currency_codes()
+        updates["monedas_aceptadas"] = normalize_monedas(
+            updates["monedas_aceptadas"], available=available
+        )
     if "whatsapp_number" in updates:
         existing = await db.users.find_one(
             {"whatsapp_number": updates["whatsapp_number"], "_id": {"$ne": current.id}}

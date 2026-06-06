@@ -10,6 +10,7 @@ from app.models.book import BookCreate, BookInDB, BookListPublic, BookPublic, Bo
 from app.models.report import BookReportCreate
 from app.services.media_url import image_url_for_response, optional_image_url_for_response
 from app.models.user import UserInDB
+from app.services.currency import moneda_from_doc, monedas_from_doc, validate_book_currencies
 from app.services.book_reports import banned_owner_ids, create_book_report
 from app.services.books_query import (
     build_book_filter,
@@ -49,6 +50,8 @@ def book_from_doc(doc: dict, vendedor: Optional[dict] = None) -> BookPublic:
         titulo=doc["titulo"],
         autor=doc["autor"],
         precio=doc["precio"],
+        moneda=moneda_from_doc(doc),
+        monedas_aceptadas=monedas_from_doc(doc),
         foto_url=image_url_for_response(doc.get("foto_url")),
         descripcion=doc.get("descripcion"),
         estado=doc["estado"],
@@ -72,6 +75,8 @@ def book_list_from_doc(doc: dict, vendedor: Optional[dict] = None) -> BookListPu
         titulo=doc["titulo"],
         autor=doc["autor"],
         precio=doc["precio"],
+        moneda=moneda_from_doc(doc),
+        monedas_aceptadas=monedas_from_doc(doc),
         foto_url=image_url_for_response(doc.get("foto_url")),
         estado=doc["estado"],
         provincia=doc["provincia"],
@@ -166,6 +171,11 @@ async def create_book(payload: BookCreate, current: UserInDB = Depends(get_curre
             detail="Provincia o municipio inválido",
         )
     db = get_db()
+    moneda, monedas_aceptadas = await validate_book_currencies(
+        moneda=payload.moneda,
+        monedas_aceptadas=payload.monedas_aceptadas,
+        owner_monedas=current.monedas_aceptadas,
+    )
     book_id = str(uuid4())
     doc = {
         "_id": book_id,
@@ -173,6 +183,8 @@ async def create_book(payload: BookCreate, current: UserInDB = Depends(get_curre
         "titulo": payload.titulo,
         "autor": payload.autor,
         "precio": payload.precio,
+        "moneda": moneda,
+        "monedas_aceptadas": monedas_aceptadas,
         "foto_url": payload.foto_url,
         "descripcion": payload.descripcion,
         "estado": payload.estado.value if hasattr(payload.estado, "value") else payload.estado,
@@ -203,6 +215,14 @@ async def update_book(
     if doc["owner_id"] != current.id and not current.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permiso")
     updates = payload.model_dump(exclude_unset=True)
+    if "moneda" in updates or "monedas_aceptadas" in updates:
+        moneda, monedas_aceptadas = await validate_book_currencies(
+            moneda=updates.get("moneda", doc.get("moneda")),
+            monedas_aceptadas=updates.get("monedas_aceptadas", doc.get("monedas_aceptadas")),
+            owner_monedas=current.monedas_aceptadas,
+        )
+        updates["moneda"] = moneda
+        updates["monedas_aceptadas"] = monedas_aceptadas
     prov = updates.get("provincia", doc.get("provincia"))
     mun = updates.get("municipio", doc.get("municipio"))
     if not is_valid_location(prov, mun):

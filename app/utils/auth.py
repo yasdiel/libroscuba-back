@@ -58,6 +58,7 @@ def user_from_doc(doc: dict) -> UserInDB:
         municipio=doc["municipio"],
         nombre_tienda=doc["nombre_tienda"],
         municipios_envio=doc.get("municipios_envio", []) or [],
+        monedas_aceptadas=doc.get("monedas_aceptadas") or ["CUP"],
         is_admin=doc.get("is_admin", False),
         is_banned=bool(doc.get("is_banned")),
         created_at=doc.get("created_at", datetime.now(timezone.utc)),

@@ -34,3 +34,5 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
+      - key: EL_TOQUE_API_TOKEN
+        sync: false
