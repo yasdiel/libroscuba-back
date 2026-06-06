@@ -15,18 +15,14 @@ logger = logging.getLogger(__name__)
 BASE_CURRENCY = "CUP"
 DEFAULT_ACCEPTED = [BASE_CURRENCY]
 
+# Monedas habilitadas en LibrosCuba (tasas desde elTOQUE)
+SUPPORTED_CURRENCIES = frozenset({"CUP", "USD", "EUR", "MLC"})
+
 # Códigos de la API elTOQUE → código interno de la app
 API_CODE_MAP: dict[str, str] = {
     "USD": "USD",
     "ECU": "EUR",
     "MLC": "MLC",
-    "USDT_TRC20": "USDT",
-    "BTC": "BTC",
-    "TRX": "TRX",
-    "CAD": "CAD",
-    "MXN": "MXN",
-    "BRL": "BRL",
-    "CLA": "CLA",
 }
 
 CURRENCY_LABELS: dict[str, str] = {
@@ -34,13 +30,6 @@ CURRENCY_LABELS: dict[str, str] = {
     "USD": "Dólar (USD)",
     "EUR": "Euro (EUR)",
     "MLC": "MLC",
-    "USDT": "USDT (TRC20)",
-    "BTC": "Bitcoin (BTC)",
-    "TRX": "TRON (TRX)",
-    "CAD": "Dólar canadiense (CAD)",
-    "MXN": "Peso mexicano (MXN)",
-    "BRL": "Real brasileño (BRL)",
-    "CLA": "CLA",
 }
 
 
@@ -79,7 +68,7 @@ async def get_rates_cup_per_unit() -> dict[str, float]:
     tasas = raw.get("tasas") or {}
     for api_code, value in tasas.items():
         app_code = API_CODE_MAP.get(str(api_code).upper())
-        if not app_code:
+        if not app_code or app_code not in SUPPORTED_CURRENCIES:
             continue
         try:
             rate = float(value)
@@ -92,7 +81,7 @@ async def get_rates_cup_per_unit() -> dict[str, float]:
 
 async def available_currency_codes() -> set[str]:
     rates = await get_rates_cup_per_unit()
-    return set(rates.keys())
+    return SUPPORTED_CURRENCIES & set(rates.keys())
 
 
 async def build_currencies_payload() -> dict[str, Any]:
@@ -114,13 +103,15 @@ async def build_currencies_payload() -> dict[str, Any]:
         }
 
     rates = await get_rates_cup_per_unit()
+    order = ["CUP", "USD", "EUR", "MLC"]
     currencies = [
         {
             "code": code,
             "label": currency_label(code),
             "rate_cup": rates[code],
         }
-        for code in sorted(rates.keys(), key=lambda c: (c != BASE_CURRENCY, c))
+        for code in order
+        if code in rates
     ]
     return {
         "base": BASE_CURRENCY,
